@@ -87,7 +87,7 @@ std::string CobotError::to_string() const
   return ss.str();
 }
 
-Messenger::Messenger() {}
+Messenger::Messenger() : msg_count_(0) {}
 
 std::unique_ptr<Response> Messenger::wait_for_response(uint32_t msg_id, SerialPort& serial_port,
                                                        rclcpp::Logger& logger, uint timeout)
@@ -173,6 +173,32 @@ void Messenger::wait_for_done(uint32_t msg_id, LibSerial::SerialPort& serial_por
     RCLCPP_WARN(logger, "Unexpected response type '%d' while waiting for DONE",
                 static_cast<int>(response->type));
   }
+}
+
+uint32_t Messenger::send_request(RequestType type, const uint8_t* payload, size_t payload_len,
+                                 LibSerial::SerialPort& serial_port, rclcpp::Logger& logger)
+{
+  // Generate a UUID for the message.
+  uint32_t uuid = gen_uuid();
+
+  // Construct the message.
+  size_t msg_len = 1 + 4 + payload_len;  // 1 byte type, 4 bytes UUID, payload
+  auto msg = new uint8_t[msg_len];
+  msg[0] = static_cast<uint8_t>(type);
+  serialize_uint32(msg + 1, msg_len - 1, uuid);
+  if (payload_len > 0) memcpy(msg + 5, payload, payload_len);
+
+  // Send the message.
+  try {
+    send_msg(msg, msg_len, serial_port, logger);
+  } catch (const std::exception& e) {
+    delete[] msg;
+    throw e;
+  }
+
+  // Clean up and return the UUID.
+  delete[] msg;
+  return uuid;
 }
 
 bool Messenger::try_recv(LibSerial::SerialPort& serial_port, rclcpp::Logger& logger)
@@ -310,6 +336,41 @@ bool Messenger::try_recv(LibSerial::SerialPort& serial_port, rclcpp::Logger& log
   }
 
   return found_message;
+}
+
+void Messenger::send_msg(const uint8_t* msg, size_t msg_len, LibSerial::SerialPort& serial_port,
+                         rclcpp::Logger& logger)
+{
+  // Calculate the CRC.
+  uint8_t crc = crc8ccitt(msg, msg_len);
+
+  // Construct the header.
+  out_buffer_.clear();
+  out_buffer_.push_back(MSG_START_BYTE);
+  out_buffer_.push_back(static_cast<uint8_t>(msg_len));
+  out_buffer_.push_back(crc);
+
+  // Append the payload.
+  out_buffer_.insert(out_buffer_.end(), msg, msg + msg_len);
+
+  // Send the message to the serial port.
+  try {
+    serial_port.Write(out_buffer_);
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(logger, "Failed to write to serial port: %s", e.what());
+    throw e;
+  }
+}
+
+uint32_t Messenger::gen_uuid()
+{
+  auto now = std::chrono::system_clock::now();
+  auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
+  auto value = now_ms.time_since_epoch();
+
+  uint16_t uuid_time = value.count() & 0xFFFF;
+  uint16_t uuid_count = msg_count_++;
+  return (uuid_count << 16) | uuid_time;
 }
 
 void Messenger::throw_if_error(const Response& response, rclcpp::Logger& logger)

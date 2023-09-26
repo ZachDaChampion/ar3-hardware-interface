@@ -33,7 +33,7 @@
  *                 │    Inactive    │
  *          ┌──────┤                │◄─────┐
  *          │      └────────────────┘      │
- *    n_activate()                    on_deactivate()
+ *   on_activate()                    on_deactivate()
  *          │      ┌────────────────┐      │
  *          └─────►│                ├──────┘
  *                 │     Active     │
@@ -50,6 +50,7 @@
 
 #include <libserial/SerialPort.h>
 
+#include "ar3_hardware_interface/messaging.hpp"
 #include "hardware_interface/system_interface.hpp"
 #include "rclcpp/macros.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -194,6 +195,9 @@ private:
 
   // Serial port object.
   LibSerial::SerialPort serial_port_;
+
+  // Messenger object for sending and receiving messages.
+  Messenger messenger_;
 };
 }  // namespace ar3_hardware_interface
 

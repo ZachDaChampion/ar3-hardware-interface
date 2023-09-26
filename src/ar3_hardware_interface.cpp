@@ -7,43 +7,12 @@
  */
 
 #include "ar3_hardware_interface/ar3_hardware_interface.hpp"
-#include "ar3_hardware_interface/checksum.hpp"
+
 #include <chrono>
 
-#define FW_VERSION 3
+#include "ar3_hardware_interface/checksum.hpp"
 
-//                                                                                                //
-// ===================================== Utility functions ====================================== //
-//                                                                                                //
-
-/**
- * Generates a new UUID for a message. This is a 32-bit number used to identify messages. The first
- * 16 bits correspond to the current millisecond of epoch time, and the last 16 bits are incremented
- * for each message.
- *
- * This system is used to prevent duplicate messages from being sent to the robot. The incrementing
- * counter is used to prevent duplicate messages from being sent in the same millisecond, and the
- * millisecond time is used to prevent duplicate messages from being sent when the node is
- * restarted, or when the counter overflows.
- *
- * @return a new UUID
- */
-static uint32_t gen_uuid()
-{
-  static uint16_t msg_count = 0;
-
-  auto now = std::chrono::system_clock::now();
-  auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
-  auto value = now_ms.time_since_epoch();
-
-  uint16_t uuid_time = value.count() & 0xFFFF;
-  uint16_t uuid_count = msg_count++;
-  return (uuid_count << 16) | uuid_time;
-}
-
-//                                                                                                //
-// ===================================== Hardware interface ===================================== //
-//                                                                                                //
+static constexpr uint32_t FW_VERSION = 3;
 
 namespace ar3_hardware_interface
 {
@@ -130,7 +99,6 @@ AR3HardwareInterface::on_init(const hardware_interface::HardwareInfo& info)
 hardware_interface::CallbackReturn
 AR3HardwareInterface::on_shutdown(const rclcpp_lifecycle::State& previous_state)
 {
-  // TODO: Implement on_shutdown
   return CallbackReturn::SUCCESS;
 }
 
@@ -168,18 +136,39 @@ AR3HardwareInterface::on_cleanup(const rclcpp_lifecycle::State& previous_state)
 hardware_interface::CallbackReturn
 AR3HardwareInterface::on_activate(const rclcpp_lifecycle::State& previous_state)
 {
-  // Send start command with firmware version
-  // uint8_t write_buf[3 + 5 + 4];  // 3 byte fame, 5 byte request, 4 byte payload
-  // write_buf[0] = START_BYTE;
-  // write_buf[3] = static_cast<uint8_t>(Request::Init);
-  // try {
-  //   asio::write(this->serial_port_, asio::buffer(write_buf, sizeof(write_buf)));
-  // } catch (const std::exception& e) {
-  //   RCLCPP_ERROR(this->get_logger(), "Failed to write to serial port: %s", e.what());
-  //   return CallbackReturn::ERROR;
-  // }
+  static uint8_t fw_version[] = {
+    FW_VERSION & 0xFF,
+    (FW_VERSION >> 8) & 0xFF,
+    (FW_VERSION >> 16) & 0xFF,
+    (FW_VERSION >> 24) & 0xFF,
+  };
+  static uint8_t all_joints[] = { 0b111111 };
 
-  // TODO: Wait for response from robot
+  // Send init command with firmware version.
+  try {
+    auto logger = get_logger();
+    uint32_t msg_id = messenger_.send_request(RequestType::Init, fw_version, sizeof(fw_version),
+                                              serial_port_, logger);
+    messenger_.wait_for_ack(msg_id, serial_port_, logger);
+
+    // Calibrate the robot.
+    msg_id = messenger_.send_request(RequestType::Calibrate, all_joints, sizeof(all_joints),
+                                     serial_port_, logger);
+    messenger_.wait_for_ack(msg_id, serial_port_, logger);
+    messenger_.wait_for_done(msg_id, serial_port_, logger);
+
+    // Home the robot.
+    msg_id = messenger_.send_request(RequestType::GoHome, all_joints, sizeof(all_joints),
+                                     serial_port_, logger);
+    messenger_.wait_for_ack(msg_id, serial_port_, logger);
+    messenger_.wait_for_done(msg_id, serial_port_, logger);
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(get_logger(), "Failed to activate robot: %s", e.what());
+    return CallbackReturn::ERROR;
+  } catch (const CobotError& e) {
+    RCLCPP_ERROR(get_logger(), "Failed to activate robot: %s", e.to_string().c_str());
+    return CallbackReturn::ERROR;
+  }
 
   return CallbackReturn::SUCCESS;
 }
@@ -187,7 +176,20 @@ AR3HardwareInterface::on_activate(const rclcpp_lifecycle::State& previous_state)
 hardware_interface::CallbackReturn
 AR3HardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previous_state)
 {
-  // TODO: Implement on_deactivate
+  // Send reset command.
+  try {
+    auto logger = get_logger();
+    uint32_t msg_id = messenger_.send_request(RequestType::Reset, nullptr, 0, serial_port_, logger);
+    messenger_.wait_for_ack(msg_id, serial_port_, logger);
+    messenger_.wait_for_done(msg_id, serial_port_, logger);
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(get_logger(), "Failed to deactivate robot: %s", e.what());
+    return CallbackReturn::ERROR;
+  } catch (const CobotError& e) {
+    RCLCPP_ERROR(get_logger(), "Failed to deactivate robot: %s", e.to_string().c_str());
+    return CallbackReturn::ERROR;
+  }
+
   return CallbackReturn::SUCCESS;
 }
 

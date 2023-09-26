@@ -161,6 +161,19 @@ public:
   void wait_for_done(uint32_t msg_id, LibSerial::SerialPort& serial_port, rclcpp::Logger& logger,
                      uint timeout = 0);
 
+  /**
+   * Send a request to the COBOT.
+   *
+   * @param[in] type The type of request to send.
+   * @param[in] payload The payload of the request.
+   * @param[in] payload_len The length of the payload.
+   * @param[in] serial_port The serial port to send the request to.
+   * @param[in] logger The logger to log messages to.
+   * @return The ID of the message that was sent.
+   */
+  uint32_t send_request(RequestType type, const uint8_t* payload, size_t payload_len,
+                        LibSerial::SerialPort& serial_port, rclcpp::Logger& logger);
+
 private:
   /**
    * Try to receive a message from the serial port. This will read all available bytes from the
@@ -175,8 +188,33 @@ private:
   bool try_recv(LibSerial::SerialPort& serial_port, rclcpp::Logger& logger);
 
   /**
+   * Send a message to the COBOT. This will prepend the message with an appropriate header.
+   *
+   * @param[in] msg The message to send.
+   * @param[in] msg_len The length of the message.
+   * @param[in] serial_port The serial port to send the message to.
+   * @param[in] logger The logger to log messages to.
+   */
+  void send_msg(const uint8_t* msg, size_t msg_len, LibSerial::SerialPort& serial_port,
+                rclcpp::Logger& logger);
+
+  /**
+   * Generates a new UUID for a message. This is a 32-bit number used to identify messages. The
+   * first 16 bits correspond to the current millisecond of epoch time, and the last 16 bits are
+   * incremented for each message.
+   *
+   * This system is used to prevent duplicate messages from being sent to the robot. The
+   * incrementing counter is used to prevent duplicate messages from being sent in the same
+   * millisecond, and the millisecond time is used to prevent duplicate messages from being sent
+   * when the node is restarted, or when the counter overflows.
+   *
+   * @return a new UUID
+   */
+  uint32_t gen_uuid();
+
+  /**
    * If the given message is an error, parse it and throw an exception.
-   * 
+   *
    * @param[in] response The response to check.
    * @param[in] logger The logger to log messages to.
    */
@@ -188,6 +226,9 @@ private:
 
   // A list of response messages that have been received.
   std::list<std::unique_ptr<Response>> response_queue_;
+
+  // Total number of messages sent.
+  uint32_t msg_count_;
 };
 
 #endif
