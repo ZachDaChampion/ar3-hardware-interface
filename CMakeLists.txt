@@ -24,11 +24,13 @@ endforeach()
 add_library(
   ar3_hardware_interface
   SHARED
-  hardware/ar3_hardware_interface.cpp
+  src/ar3_hardware_interface.cpp
+  src/checksum.cpp
+  src/messaging.cpp
 )
 target_compile_features(ar3_hardware_interface PUBLIC cxx_std_17)
 target_include_directories(ar3_hardware_interface PUBLIC 
-  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/hardware/include>
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include/ar3_hardware_interface>
 )
 ament_target_dependencies(ar3_hardware_interface PUBLIC ${THIS_PACKAGE_INCLUDE_DEPENDS})
@@ -38,7 +40,7 @@ pluginlib_export_plugin_description_file(hardware_interface ar3_hardware_interfa
 
 ## INSTALL
 install(
-  DIRECTORY hardware/include/
+  DIRECTORY include/
   DESTINATION include/ar3_hardware_interface
 )
 install(

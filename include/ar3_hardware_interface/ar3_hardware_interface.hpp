@@ -1,4 +1,11 @@
-/*
+/**
+ * @file ar3_hardware_interface.hpp
+ * @author Zach Champion (zachchampion79@gmail.com)
+ *
+ * @version 1.0
+ * @date 2023-09-25
+ *
+ *
  * This header defines the AR3HardwareInterface class. This is a hardware interface for
  * `ros2_control` that allows the AR3 robot to be controlled by a controller manager.
  *
@@ -41,10 +48,11 @@
 #ifndef AR3_HARDWARE_INTERFACE__AR3_HARDWARE_INTERFACE_HPP
 #define AR3_HARDWARE_INTERFACE__AR3_HARDWARE_INTERFACE_HPP
 
+#include <libserial/SerialPort.h>
+
 #include "hardware_interface/system_interface.hpp"
 #include "rclcpp/macros.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include <boost/asio.hpp>
 
 namespace ar3_hardware_interface
 {
@@ -180,11 +188,12 @@ public:
   rclcpp::Logger get_logger() const;
 
 private:
-  boost::asio::io_service io_service_;
-  boost::asio::serial_port serial_port_;
-  uint8_t read_buf_[1024];
-  std::string serial_dev_;
-  uint baud_rate_;
+  // Serial port parameters.
+  LibSerial::BaudRate baud_rate_;
+  std::string serial_dev_name_;
+
+  // Serial port object.
+  LibSerial::SerialPort serial_port_;
 };
 }  // namespace ar3_hardware_interface
 
