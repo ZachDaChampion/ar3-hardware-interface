@@ -15,11 +15,12 @@
 #include "ar3_hardware_interface/serialize.h"
 
 using namespace std;
+using namespace chrono;
 using namespace LibSerial;
 
 #define MSG_START_BYTE 0x24
 
-CobotError::CobotError(uint8_t code, std::string message) : message_(message)
+CobotError::CobotError(uint8_t code, string message) : message_(message)
 {
   switch (code) {
     case static_cast<uint8_t>(Code::OTHER):
@@ -53,9 +54,9 @@ CobotError::CobotError(uint8_t code, std::string message) : message_(message)
   }
 }
 
-std::string CobotError::to_string() const
+string CobotError::to_string() const
 {
-  std::strstream ss;
+  strstream ss;
   ss << "COBOT error: ";
   switch (code_) {
     case Code::OTHER:
@@ -87,19 +88,33 @@ std::string CobotError::to_string() const
   return ss.str();
 }
 
-Messenger::Messenger() : msg_count_(0) {}
-
-std::unique_ptr<Response> Messenger::wait_for_response(uint32_t msg_id, SerialPort& serial_port,
-                                                       rclcpp::Logger& logger, uint timeout)
+Messenger::Messenger(int32_t expire_response_after)
+  : msg_count_(0), expire_responses_after_(expire_response_after)
 {
-  auto start_time = chrono::steady_clock::now();
+}
+
+unique_ptr<Response> Messenger::wait_for_response(uint32_t msg_id, SerialPort& serial_port,
+                                                  rclcpp::Logger& logger, uint timeout)
+{
+  auto start_time = steady_clock::now();
   while (true) {
     // Check if the timeout has been exceeded.
     if (timeout > 0) {
-      auto elapsed = chrono::steady_clock::now() - start_time;
-      if (chrono::duration_cast<chrono::milliseconds>(elapsed).count() > timeout) {
+      auto elapsed = steady_clock::now() - start_time;
+      if (duration_cast<milliseconds>(elapsed).count() > timeout) {
         RCLCPP_WARN(logger, "Timeout exceeded");
         throw runtime_error("Timeout exceeded");
+      }
+    }
+
+    // Delete all expired responses.
+    auto current_time = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+    for (auto it = response_queue_.begin(); it != response_queue_.end();) {
+      auto expiration_time = (*it)->expiration_time;
+      if (expiration_time != 0 && current_time > expiration_time) {
+        it = response_queue_.erase(it);
+      } else {
+        ++it;
       }
     }
 
@@ -114,7 +129,7 @@ std::unique_ptr<Response> Messenger::wait_for_response(uint32_t msg_id, SerialPo
 
     // If no response has been received, try to receive one.
     if (!try_recv(serial_port, logger)) {
-      this_thread::sleep_for(chrono::milliseconds(1));
+      this_thread::sleep_for(milliseconds(1));
     }
   }
 }
@@ -122,13 +137,13 @@ std::unique_ptr<Response> Messenger::wait_for_response(uint32_t msg_id, SerialPo
 void Messenger::wait_for_ack(uint32_t msg_id, LibSerial::SerialPort& serial_port,
                              rclcpp::Logger& logger, uint timeout)
 {
-  auto start_time = chrono::steady_clock::now();
+  auto start_time = steady_clock::now();
   while (true) {
     // Check if the timeout has been exceeded.
     uint time_left = 0;
     if (timeout > 0) {
-      auto elapsed = chrono::steady_clock::now() - start_time;
-      auto elapsed_ms = chrono::duration_cast<chrono::milliseconds>(elapsed).count();
+      auto elapsed = steady_clock::now() - start_time;
+      auto elapsed_ms = duration_cast<milliseconds>(elapsed).count();
       if (elapsed_ms > timeout) {
         RCLCPP_WARN(logger, "Timeout exceeded");
         throw runtime_error("Timeout exceeded");
@@ -150,13 +165,13 @@ void Messenger::wait_for_ack(uint32_t msg_id, LibSerial::SerialPort& serial_port
 void Messenger::wait_for_done(uint32_t msg_id, LibSerial::SerialPort& serial_port,
                               rclcpp::Logger& logger, uint timeout)
 {
-  auto start_time = chrono::steady_clock::now();
+  auto start_time = steady_clock::now();
   while (true) {
     // Check if the timeout has been exceeded.
     uint time_left = 0;
     if (timeout > 0) {
-      auto elapsed = chrono::steady_clock::now() - start_time;
-      auto elapsed_ms = chrono::duration_cast<chrono::milliseconds>(elapsed).count();
+      auto elapsed = steady_clock::now() - start_time;
+      auto elapsed_ms = duration_cast<milliseconds>(elapsed).count();
       if (elapsed_ms > timeout) {
         RCLCPP_WARN(logger, "Timeout exceeded");
         throw runtime_error("Timeout exceeded");
@@ -191,7 +206,7 @@ uint32_t Messenger::send_request(RequestType type, const uint8_t* payload, size_
   // Send the message.
   try {
     send_msg(msg, msg_len, serial_port, logger);
-  } catch (const std::exception& e) {
+  } catch (const exception& e) {
     delete[] msg;
     throw e;
   }
@@ -265,7 +280,7 @@ bool Messenger::try_recv(LibSerial::SerialPort& serial_port, rclcpp::Logger& log
           continue;
         }
 
-        std::string log_str(&in_buffer_[payload + 3], &in_buffer_[payload + 3 + log_str_len]);
+        string log_str(&in_buffer_[payload + 3], &in_buffer_[payload + 3 + log_str_len]);
 
         switch (log_level) {
           case static_cast<uint8_t>(LogLevel::DEBUG):
@@ -295,8 +310,14 @@ bool Messenger::try_recv(LibSerial::SerialPort& serial_port, rclcpp::Logger& log
           continue;
         }
 
-        auto response = std::make_unique<Response>();
+        auto response = make_unique<Response>();
 
+        // Set the response's expiration time.
+        auto current_time =
+            duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+        response->expiration_time = current_time + expire_responses_after_;
+
+        // Parse the response's type.
         switch (in_buffer_[payload]) {
           case static_cast<uint8_t>(Response::Type::Ack):
             response->type = Response::Type::Ack;
@@ -316,15 +337,18 @@ bool Messenger::try_recv(LibSerial::SerialPort& serial_port, rclcpp::Logger& log
             continue;
         }
 
+        // Parse the response's UUID.
         deserialize_uint32(&response->uuid, &in_buffer_[payload + 1]);
 
+        // Parse the response's data.
         if (payload_size > 5)
           response->data =
-              std::vector<uint8_t>(&in_buffer_[payload + 5], &in_buffer_[payload + payload_size]);
+              vector<uint8_t>(&in_buffer_[payload + 5], &in_buffer_[payload + payload_size]);
         else
           response->data = boost::none;
 
-        response_queue_.push_back(std::move(response));
+        // Add the response to the queue.
+        response_queue_.push_back(move(response));
         found_message = true;
       } break;
     }
@@ -356,7 +380,7 @@ void Messenger::send_msg(const uint8_t* msg, size_t msg_len, LibSerial::SerialPo
   // Send the message to the serial port.
   try {
     serial_port.Write(out_buffer_);
-  } catch (const std::exception& e) {
+  } catch (const exception& e) {
     RCLCPP_ERROR(logger, "Failed to write to serial port: %s", e.what());
     throw e;
   }
@@ -364,8 +388,8 @@ void Messenger::send_msg(const uint8_t* msg, size_t msg_len, LibSerial::SerialPo
 
 uint32_t Messenger::gen_uuid()
 {
-  auto now = std::chrono::system_clock::now();
-  auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(now);
+  auto now = system_clock::now();
+  auto now_ms = time_point_cast<milliseconds>(now);
   auto value = now_ms.time_since_epoch();
 
   uint16_t uuid_time = value.count() & 0xFFFF;
@@ -394,7 +418,7 @@ void Messenger::throw_if_error(const Response& response, rclcpp::Logger& logger)
     throw runtime_error("COBOT error: (data too short)");
   }
 
-  std::string error_msg(&(*response.data)[2], &(*response.data)[2 + error_msg_len]);
+  string error_msg(&(*response.data)[2], &(*response.data)[2 + error_msg_len]);
   RCLCPP_ERROR(logger, "COBOT error: %s", error_msg.c_str());
   throw CobotError(error_code, error_msg);
 }

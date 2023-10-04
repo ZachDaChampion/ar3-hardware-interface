@@ -20,7 +20,9 @@ using namespace std;
 namespace ar3_hardware_interface
 {
 
-ar3_hardware_interface::AR3HardwareInterface::AR3HardwareInterface() {}
+ar3_hardware_interface::AR3HardwareInterface::AR3HardwareInterface() : messenger_(Messenger(1000))
+{
+}
 
 hardware_interface::CallbackReturn
 AR3HardwareInterface::on_init(const hardware_interface::HardwareInfo& info)

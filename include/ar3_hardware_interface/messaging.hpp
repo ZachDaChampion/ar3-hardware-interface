@@ -12,6 +12,7 @@
 #include <libserial/SerialPort.h>
 
 #include <boost/optional.hpp>
+#include <chrono>
 #include <deque>
 #include <list>
 #include <string>
@@ -109,6 +110,7 @@ struct Response {
   uint32_t uuid;
   Type type;
   boost::optional<std::vector<uint8_t>> data;
+  int64_t expiration_time;
 };
 
 class Messenger
@@ -117,10 +119,7 @@ public:
   /**
    * Construct a new Messenger object.
    */
-  Messenger();
-
-  Messenger(const Messenger&) = delete;
-  Messenger& operator=(const Messenger&) = delete;
+  Messenger(int32_t expire_responses_after = 0);
 
   /**
    * Blocks until a response is received with the given ID.
@@ -226,6 +225,9 @@ private:
 
   // A list of response messages that have been received.
   std::list<std::unique_ptr<Response>> response_queue_;
+
+  // Expiration time to assign to responses (in milliseconds). If 0, responses will not expire.
+  int32_t expire_responses_after_ = 0;
 
   // Total number of messages sent.
   uint32_t msg_count_;

@@ -189,7 +189,6 @@ public:
   rclcpp::Logger get_logger() const;
 
 protected:
-
   std::vector<double> joint_position_command_;
   std::vector<double> joint_velocity_command_;
   std::vector<double> joint_position_;
