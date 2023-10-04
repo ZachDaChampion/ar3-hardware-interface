@@ -188,7 +188,15 @@ public:
    */
   rclcpp::Logger get_logger() const;
 
-private:
+protected:
+
+  std::vector<double> joint_position_command_;
+  std::vector<double> joint_velocity_command_;
+  std::vector<double> joint_position_;
+  std::vector<double> joint_velocity_;
+
+  std::vector<std::string> joint_names_;
+
   // Serial port parameters.
   LibSerial::BaudRate baud_rate_;
   std::string serial_dev_name_;
