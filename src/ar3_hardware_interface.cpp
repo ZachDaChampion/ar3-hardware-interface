@@ -213,7 +213,7 @@ AR3HardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previous_stat
 vector<hardware_interface::StateInterface> AR3HardwareInterface::export_state_interfaces()
 {
   vector<hardware_interface::StateInterface> state_interfaces;
-  for (int i = 0; i < joint_names_.size(); ++i) {
+  for (size_t i = 0; i < joint_names_.size(); ++i) {
     auto joint_name = joint_names_[i];
     state_interfaces.emplace_back(joint_name, "position", &joint_position_[i]);
     state_interfaces.emplace_back(joint_name, "velocity", &joint_velocity_[i]);
@@ -224,7 +224,7 @@ vector<hardware_interface::StateInterface> AR3HardwareInterface::export_state_in
 vector<hardware_interface::CommandInterface> AR3HardwareInterface::export_command_interfaces()
 {
   vector<hardware_interface::CommandInterface> command_interfaces;
-  for (int i = 0; i < joint_names_.size(); ++i) {
+  for (size_t i = 0; i < joint_names_.size(); ++i) {
     auto joint_name = joint_names_[i];
     command_interfaces.emplace_back(joint_name, "position", &joint_position_command_[i]);
     command_interfaces.emplace_back(joint_name, "velocity", &joint_velocity_command_[i]);
@@ -249,7 +249,7 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
   while (true) {
     response = messenger_.wait_for_response(msg_id, serial_port_, logger);
     if (response->type != Response::Type::Joints) {
-      RCLCPP_WARN(logger, "Received unexpected response type: %d", response->type);
+      RCLCPP_WARN(logger, "Received unexpected response type: %d", static_cast<uint8_t>(response->type));
       continue;
     }
   }
@@ -263,13 +263,13 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
   auto payload_data = payload.data();
   auto payload_size = payload.size();
   if (payload_size < 1) {
-    RCLCPP_ERROR(logger, "Received joints response with invalid payload size: %d", payload.size());
+    RCLCPP_ERROR(logger, "Received joints response with invalid payload size: %ld", payload.size());
     return hardware_interface::return_type::ERROR;
   }
   uint8_t received_joint_count = payload[0];
-  auto expected_size = 1 + received_joint_count * 8;
+  size_t expected_size = 1 + received_joint_count * 8;
   if (payload_size != expected_size) {
-    RCLCPP_ERROR(logger, "Received joints response with invalid payload size: %d, expected %d",
+    RCLCPP_ERROR(logger, "Received joints response with invalid payload size: %ld, expected %ld",
                  payload.size(), expected_size);
     return hardware_interface::return_type::ERROR;
   }
@@ -300,7 +300,7 @@ hardware_interface::return_type AR3HardwareInterface::write(const rclcpp::Time& 
   uint8_t* payload_data = payload.data();
 
   // Serialize joint commands.
-  for (int i = 0; i < joint_count; ++i) {
+  for (size_t i = 0; i < joint_count; ++i) {
     // Convert to units expected by the robot.
     uint8_t joint_id = static_cast<uint8_t>(i);
     int32_t command_position = static_cast<int32_t>(joint_position_command_[i] * 1000.0);

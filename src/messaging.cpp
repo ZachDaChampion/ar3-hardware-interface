@@ -9,7 +9,7 @@
 #include "ar3_hardware_interface/messaging.hpp"
 
 #include <chrono>
-#include <strstream>
+#include <sstream>
 
 #include "ar3_hardware_interface/checksum.hpp"
 #include "ar3_hardware_interface/serialize.h"
@@ -56,7 +56,7 @@ CobotError::CobotError(uint8_t code, string message) : message_(message)
 
 string CobotError::to_string() const
 {
-  strstream ss;
+  stringstream ss;
   ss << "COBOT error: ";
   switch (code_) {
     case Code::OTHER:
@@ -237,7 +237,7 @@ bool Messenger::try_recv(LibSerial::SerialPort& serial_port, rclcpp::Logger& log
     }
 
     // Read the header and verify that it fits in the buffer.
-    if (in_buffer_.size() - cursor < 3) {
+    if (in_buffer_.size() - cursor < 3u) {
       in_buffer_.erase(in_buffer_.begin(), in_buffer_.begin() + shift_by);
       return false;
     }
@@ -245,7 +245,7 @@ bool Messenger::try_recv(LibSerial::SerialPort& serial_port, rclcpp::Logger& log
     uint8_t crc = in_buffer_[cursor + 2];
 
     // Verify that the payload fits in the buffer.
-    if (in_buffer_.size() - cursor < 3 + payload_size) {
+    if (in_buffer_.size() - cursor < 3u + payload_size) {
       in_buffer_.erase(in_buffer_.begin(), in_buffer_.begin() + shift_by);
       return false;
     }
@@ -413,7 +413,7 @@ void Messenger::throw_if_error(const Response& response, rclcpp::Logger& logger)
   uint8_t error_code = (*response.data)[0];
   uint8_t error_msg_len = (*response.data)[1];
 
-  if (response.data->size() < 2 + error_msg_len) {
+  if (response.data->size() < 2u + error_msg_len) {
     RCLCPP_WARN(logger, "COBOT error: (data too short)");
     throw runtime_error("COBOT error: (data too short)");
   }

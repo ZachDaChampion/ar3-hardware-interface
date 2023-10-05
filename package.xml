@@ -4,7 +4,7 @@
   <name>ar3_hardware_interface</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
-  <maintainer email="zachc@todo.todo">zachc</maintainer>
+  <maintainer email="zchampion2020@my.fit.edu">cobot</maintainer>
   <license>GPL-3.0-only</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
