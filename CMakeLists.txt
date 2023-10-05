@@ -27,6 +27,7 @@ add_library(
   src/ar3_hardware_interface.cpp
   src/checksum.cpp
   src/messaging.cpp
+  src/serialize.cpp
 )
 target_compile_features(ar3_hardware_interface PUBLIC cxx_std_17)
 target_include_directories(ar3_hardware_interface PUBLIC 
