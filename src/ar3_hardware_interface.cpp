@@ -286,8 +286,6 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
     joint_position_[i] = static_cast<double>(angle) / 1000.0;
     joint_velocity_[i] = static_cast<double>(speed) / 1000.0;
   }
-
-  return hardware_interface::return_type::OK;
 }
 
 hardware_interface::return_type AR3HardwareInterface::write(const rclcpp::Time& time,
