@@ -13,7 +13,7 @@
 #include "ar3_hardware_interface/checksum.hpp"
 #include "ar3_hardware_interface/serialize.h"
 
-static constexpr uint32_t FW_VERSION = 3;
+static constexpr uint32_t FW_VERSION = 4;
 
 using namespace std;
 
@@ -169,10 +169,10 @@ AR3HardwareInterface::on_activate(const rclcpp_lifecycle::State& previous_state)
     messenger_.wait_for_ack(msg_id, serial_port_, logger);
 
     // Calibrate the robot.
-    msg_id = messenger_.send_request(RequestType::Calibrate, all_joints, sizeof(all_joints),
-                                     serial_port_, logger);
-    messenger_.wait_for_ack(msg_id, serial_port_, logger);
-    messenger_.wait_for_done(msg_id, serial_port_, logger);
+    // msg_id = messenger_.send_request(RequestType::Calibrate, all_joints, sizeof(all_joints),
+    //                                  serial_port_, logger);
+    // messenger_.wait_for_ack(msg_id, serial_port_, logger);
+    // messenger_.wait_for_done(msg_id, serial_port_, logger);
 
     // Home the robot.
     msg_id = messenger_.send_request(RequestType::GoHome, all_joints, sizeof(all_joints),
@@ -248,10 +248,10 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
   unique_ptr<Response> response;
   while (true) {
     response = messenger_.wait_for_response(msg_id, serial_port_, logger);
-    if (response->type != Response::Type::Joints) {
-      RCLCPP_WARN(logger, "Received unexpected response type: %d", static_cast<uint8_t>(response->type));
-      continue;
-    }
+    if (response->type == Response::Type::Joints) break;
+
+    RCLCPP_WARN(logger, "Received unexpected response type: %d",
+                static_cast<uint8_t>(response->type));
   }
 
   // Make sure there is a payload and it is the correct size.
@@ -286,6 +286,8 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
     joint_position_[i] = static_cast<double>(angle) / 1000.0;
     joint_velocity_[i] = static_cast<double>(speed) / 1000.0;
   }
+
+  return hardware_interface::return_type::OK;
 }
 
 hardware_interface::return_type AR3HardwareInterface::write(const rclcpp::Time& time,
@@ -325,3 +327,8 @@ hardware_interface::return_type AR3HardwareInterface::write(const rclcpp::Time& 
 }
 
 }  // namespace ar3_hardware_interface
+
+// This is required for pluginlib to find AR3HardwareInterface
+#include "pluginlib/class_list_macros.hpp"
+PLUGINLIB_EXPORT_CLASS(ar3_hardware_interface::AR3HardwareInterface,
+                       hardware_interface::SystemInterface)

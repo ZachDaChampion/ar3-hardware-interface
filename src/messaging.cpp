@@ -276,7 +276,8 @@ bool Messenger::try_recv(LibSerial::SerialPort& serial_port, rclcpp::Logger& log
         uint8_t log_str_len = in_buffer_[payload + 2];
 
         if (payload_size < 3 + log_str_len) {
-          RCLCPP_WARN(logger, "COBOT log message longer than payload");
+          RCLCPP_WARN(logger, "COBOT log message (%u) longer than payload (%u)", 3 + log_str_len,
+                      payload_size);
           continue;
         }
 
@@ -305,7 +306,7 @@ bool Messenger::try_recv(LibSerial::SerialPort& serial_port, rclcpp::Logger& log
 
       // If the payload is a response message, parse it and return it.
       case static_cast<uint8_t>(ReceivedMessageType::Response): {
-        if (payload_size < 5) {
+        if (payload_size < 6) {
           RCLCPP_WARN(logger, "Malformed COBOT response message");
           continue;
         }
@@ -318,7 +319,7 @@ bool Messenger::try_recv(LibSerial::SerialPort& serial_port, rclcpp::Logger& log
         response->expiration_time = current_time + expire_responses_after_;
 
         // Parse the response's type.
-        switch (in_buffer_[payload]) {
+        switch (in_buffer_[payload + 1]) {
           case static_cast<uint8_t>(Response::Type::Ack):
             response->type = Response::Type::Ack;
             break;
@@ -333,17 +334,17 @@ bool Messenger::try_recv(LibSerial::SerialPort& serial_port, rclcpp::Logger& log
             break;
 
           default:
-            RCLCPP_WARN(logger, "COBOT response with unknown type '%02x'", in_buffer_[payload]);
+            RCLCPP_WARN(logger, "COBOT response with unknown type '%02x'", in_buffer_[payload + 1]);
             continue;
         }
 
         // Parse the response's UUID.
-        deserialize_uint32(&response->uuid, &in_buffer_[payload + 1]);
+        deserialize_uint32(&response->uuid, &in_buffer_[payload + 2]);
 
         // Parse the response's data.
-        if (payload_size > 5)
+        if (payload_size > 6)
           response->data =
-              vector<uint8_t>(&in_buffer_[payload + 5], &in_buffer_[payload + payload_size]);
+              vector<uint8_t>(&in_buffer_[payload + 6], &in_buffer_[payload + payload_size]);
         else
           response->data = boost::none;
 

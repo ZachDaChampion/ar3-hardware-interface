@@ -60,8 +60,6 @@ namespace ar3_hardware_interface
 class AR3HardwareInterface : public hardware_interface::SystemInterface
 {
 public:
-  RCLCPP_SHARED_PTR_DEFINITIONS(AR3HardwareInterface)
-
   /**
    * Construct a new AR3HardwareInterface object.
    */
