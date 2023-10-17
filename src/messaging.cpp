@@ -403,11 +403,11 @@ void Messenger::throw_if_error(const Response& response, rclcpp::Logger& logger)
   if (response.type != Response::Type::Error) return;
 
   if (!response.data) {
-    RCLCPP_WARN(logger, "COBOT error: (no data)");
+    RCLCPP_ERROR(logger, "COBOT error: (no data)");
     throw runtime_error("COBOT error: (no data)");
   }
   if (response.data->size() < 2) {
-    RCLCPP_WARN(logger, "COBOT error: (data too short)");
+    RCLCPP_ERROR(logger, "COBOT error: (data too short)");
     throw runtime_error("COBOT error: (data too short)");
   }
 
@@ -415,7 +415,7 @@ void Messenger::throw_if_error(const Response& response, rclcpp::Logger& logger)
   uint8_t error_msg_len = (*response.data)[1];
 
   if (response.data->size() < 2u + error_msg_len) {
-    RCLCPP_WARN(logger, "COBOT error: (data too short)");
+    RCLCPP_ERROR(logger, "COBOT error: (data too short)");
     throw runtime_error("COBOT error: (data too short)");
   }
 
