@@ -13,7 +13,7 @@
 #include "ar3_hardware_interface/checksum.hpp"
 #include "ar3_hardware_interface/serialize.h"
 
-static constexpr uint32_t FW_VERSION = 4;
+static constexpr uint32_t FW_VERSION = 5;
 
 static constexpr double ANGLE_TO_COBOT = (180.0 / M_PI) * 1000.0;
 static constexpr double ANGLE_FROM_COBOT = (M_PI / 180.0) / 1000.0;
@@ -302,35 +302,30 @@ hardware_interface::return_type AR3HardwareInterface::write(const rclcpp::Time& 
 {
   // Create payload buffer.
   auto joint_count = joint_names_.size();
-  uint8_t payload_size = joint_count * 9;  // Each joint has 9 bytes of data.
+  uint8_t payload_size = joint_count * 8;  // Each joint has 8 bytes of data.
   vector<uint8_t> payload(payload_size);
   uint8_t* payload_data = payload.data();
+
+  auto logger = get_logger();
 
   // Serialize joint commands.
   for (size_t i = 0; i < joint_count; ++i) {
     // Convert to units expected by the robot.
-    uint8_t joint_id = static_cast<uint8_t>(i);
     int32_t command_position = static_cast<int32_t>(joint_position_command_[i] * ANGLE_TO_COBOT);
     int32_t command_speed = static_cast<int32_t>(joint_velocity_command_[i] * ANGLE_TO_COBOT);
 
-    if (command_speed < 0) command_speed = -command_speed;
-
     // Serialize joint command.
-    size_t joint_id_offset = i * 9;
-    size_t command_position_offset = joint_id_offset + 1;
-    size_t command_speed_offset = command_position_offset + 4;
-    serialize_uint8(payload_data + joint_id_offset, payload_size - joint_id_offset, joint_id);
-    serialize_int32(payload_data + command_position_offset, payload_size -
-    command_position_offset,
+    size_t command_position_offset = i * 8 + 0;
+    size_t command_speed_offset    = i * 8 + 4;
+    serialize_int32(payload_data + command_position_offset, payload_size - command_position_offset,
                     command_position);
     serialize_int32(payload_data + command_speed_offset, payload_size - command_speed_offset,
                     command_speed);
   }
 
   // Send command.
-  auto logger = get_logger();
-  uint32_t msg_id = messenger_.send_request(RequestType::MoveTo, payload.data(), payload_size,
-                                            serial_port_, logger);
+  uint32_t msg_id = messenger_.send_request(RequestType::FollowTrajectory, payload_data,
+                                            payload_size, serial_port_, logger);
   messenger_.wait_for_ack(msg_id, serial_port_, logger);
 
   return hardware_interface::return_type::OK;

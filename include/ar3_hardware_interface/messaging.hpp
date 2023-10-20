@@ -77,11 +77,12 @@ enum class RequestType {
   GetJoints = 3,
   MoveTo = 4,
   MoveSpeed = 5,
-  Stop = 6,
-  GoHome = 7,
-  Reset = 8,
-  SetLogLevel = 9,
-  SetFeedback = 10,
+  FollowTrajectory = 6,
+  Stop = 7,
+  GoHome = 8,
+  Reset = 9,
+  SetLogLevel = 10,
+  SetFeedback = 11,
 };
 
 /**
