@@ -13,10 +13,13 @@
 #include "ar3_hardware_interface/checksum.hpp"
 #include "ar3_hardware_interface/serialize.h"
 
-static constexpr uint32_t FW_VERSION = 5;
+static constexpr uint32_t FW_VERSION = 6;
 
-static constexpr double ANGLE_TO_COBOT = (180.0 / M_PI) * 1000.0;
-static constexpr double ANGLE_FROM_COBOT = (M_PI / 180.0) / 1000.0;
+static constexpr size_t JOINT_COUNT = 6;
+static constexpr double DEG_TO_RAD = M_PI / 180.0;
+static constexpr double RAD_TO_DEG = 180.0 / M_PI;
+static constexpr double ANGLE_TO_COBOT = RAD_TO_DEG * 1000.0;
+static constexpr double ANGLE_FROM_COBOT = DEG_TO_RAD / 1000.0;
 
 using namespace std;
 
@@ -38,6 +41,7 @@ AR3HardwareInterface::on_init(const hardware_interface::HardwareInfo& info)
   }
 
   // Get serial port name and baud rate from hardware info
+  prefix_ = info_.hardware_parameters["prefix"];
   serial_dev_name_ = info_.hardware_parameters["serial_port"];
   int raw_baud_rate = stoi(info_.hardware_parameters["baud_rate"]);
   switch (raw_baud_rate) {
@@ -101,16 +105,42 @@ AR3HardwareInterface::on_init(const hardware_interface::HardwareInfo& info)
       return CallbackReturn::ERROR;
   }
 
-  // Initialize joint command and state vectors
-  auto joint_count = info_.joints.size();
-  joint_position_command_.assign(joint_count, 0.0);
-  joint_velocity_command_.assign(joint_count, 0.0);
-  joint_position_.assign(joint_count, 0.0);
-  joint_velocity_.assign(joint_count, 0.0);
+  // Initialize default command and state interfaces
+  joints_.clear();
+  joints_.reserve(JOINT_COUNT);
+  for (size_t i = 0; i < JOINT_COUNT; ++i) {
+    string name = prefix_ + "joint_" + to_string(i);
+    joints_.emplace_back(Joint{ .name_ = name });
+  }
+  gripper_name_ = prefix_ + "gripper_servo";
+  gripper_enabled_ = false;
+  gripper_position_command_ = 0.0;
+  gripper_position_state_ = 0.0;
 
-  // Register joint interfaces
-  for (const auto& joint : info_.joints) {
-    joint_names_.push_back(joint.name);
+  // Enable all joints that match the hardware info
+  for (auto& info_joint : info_.joints) {
+    // Enable gripper joint
+    if (info_joint.name == gripper_name_) {
+      if (gripper_enabled_) {
+        RCLCPP_ERROR(get_logger(), "Duplicate gripper joint: %s", info_joint.name.c_str());
+        return CallbackReturn::ERROR;
+      } else {
+        gripper_enabled_ = true;
+      }
+      continue;
+    }
+
+    // Enable other joints
+    for (auto& joint : joints_) {
+      if (joint.name_ == info_joint.name) {
+        if (joint.enabled_) {
+          RCLCPP_ERROR(get_logger(), "Duplicate joint: %s", info_joint.name.c_str());
+          return CallbackReturn::ERROR;
+        } else {
+          joint.enabled_ = true;
+        }
+      }
+    }
   }
 
   return CallbackReturn::SUCCESS;
@@ -220,10 +250,14 @@ AR3HardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previous_stat
 vector<hardware_interface::StateInterface> AR3HardwareInterface::export_state_interfaces()
 {
   vector<hardware_interface::StateInterface> state_interfaces;
-  for (size_t i = 0; i < joint_names_.size(); ++i) {
-    auto joint_name = joint_names_[i];
-    state_interfaces.emplace_back(joint_name, "position", &joint_position_[i]);
-    state_interfaces.emplace_back(joint_name, "velocity", &joint_velocity_[i]);
+  for (auto& joint : joints_) {
+    if (joint.enabled_) {
+      state_interfaces.emplace_back(joint.name_, "position", &joint.position_state_);
+      state_interfaces.emplace_back(joint.name_, "velocity", &joint.velocity_state_);
+    }
+  }
+  if (gripper_enabled_) {
+    state_interfaces.emplace_back(gripper_name_, "position", &gripper_position_state_);
   }
   return state_interfaces;
 }
@@ -231,10 +265,14 @@ vector<hardware_interface::StateInterface> AR3HardwareInterface::export_state_in
 vector<hardware_interface::CommandInterface> AR3HardwareInterface::export_command_interfaces()
 {
   vector<hardware_interface::CommandInterface> command_interfaces;
-  for (size_t i = 0; i < joint_names_.size(); ++i) {
-    auto joint_name = joint_names_[i];
-    command_interfaces.emplace_back(joint_name, "position", &joint_position_command_[i]);
-    command_interfaces.emplace_back(joint_name, "velocity", &joint_velocity_command_[i]);
+  for (auto& joint : joints_) {
+    if (joint.enabled_) {
+      command_interfaces.emplace_back(joint.name_, "position", &joint.position_command_);
+      command_interfaces.emplace_back(joint.name_, "velocity", &joint.velocity_command_);
+    }
+  }
+  if (gripper_enabled_) {
+    command_interfaces.emplace_back(gripper_name_, "position", &gripper_position_command_);
   }
   return command_interfaces;
 }
@@ -274,25 +312,26 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
     return hardware_interface::return_type::ERROR;
   }
   uint8_t received_joint_count = payload[0];
-  size_t expected_size = 1 + received_joint_count * 8;
+  size_t expected_size = 1 + received_joint_count * 8 + 1;
   if (payload_size != expected_size) {
     RCLCPP_ERROR(logger, "Received joints response with invalid payload size: %ld, expected %ld",
                  payload.size(), expected_size);
     return hardware_interface::return_type::ERROR;
   }
 
-  // Figure out how many joints we can update.
-  auto joint_count = min(received_joint_count, static_cast<uint8_t>(joint_names_.size()));
-
   // Update joint positions.
-  for (int i = 0; i < joint_count; ++i) {
+  for (int i = 0; i < JOINT_COUNT; ++i) {
     int32_t angle;
     int32_t speed;
     deserialize_int32(&angle, payload_data + 1 + i * 8);
     deserialize_int32(&speed, payload_data + 5 + i * 8);
-    joint_position_[i] = static_cast<double>(angle) * ANGLE_FROM_COBOT;
-    joint_velocity_[i] = static_cast<double>(speed) * ANGLE_FROM_COBOT;
+    joints_[i].position_state_ = static_cast<double>(angle) * ANGLE_FROM_COBOT;
+    joints_[i].velocity_state_ = static_cast<double>(speed) * ANGLE_FROM_COBOT;
   }
+
+  // Update gripper servo position.
+  uint8_t gripper_pos_deg = payload_data[expected_size - 1];
+  gripper_position_state_ = static_cast<double>(gripper_pos_deg) * DEG_TO_RAD;
 
   return hardware_interface::return_type::OK;
 }
@@ -301,27 +340,31 @@ hardware_interface::return_type AR3HardwareInterface::write(const rclcpp::Time& 
                                                             const rclcpp::Duration& period)
 {
   // Create payload buffer.
-  auto joint_count = joint_names_.size();
-  uint8_t payload_size = joint_count * 8;  // Each joint has 8 bytes of data.
+  uint8_t payload_size =
+      JOINT_COUNT * 8 + 1;  // Each joint has 8 bytes of data, plus 1 byte for gripper servo.
   vector<uint8_t> payload(payload_size);
   uint8_t* payload_data = payload.data();
 
   auto logger = get_logger();
 
   // Serialize joint commands.
-  for (size_t i = 0; i < joint_count; ++i) {
+  for (size_t i = 0; i < JOINT_COUNT; ++i) {
     // Convert to units expected by the robot.
-    int32_t command_position = static_cast<int32_t>(joint_position_command_[i] * ANGLE_TO_COBOT);
-    int32_t command_speed = static_cast<int32_t>(joint_velocity_command_[i] * ANGLE_TO_COBOT);
+    int32_t command_position = static_cast<int32_t>(joints_[i].position_command_ * ANGLE_TO_COBOT);
+    int32_t command_speed = static_cast<int32_t>(joints_[i].velocity_command_ * ANGLE_TO_COBOT);
 
     // Serialize joint command.
     size_t command_position_offset = i * 8 + 0;
-    size_t command_speed_offset    = i * 8 + 4;
+    size_t command_speed_offset = i * 8 + 4;
     serialize_int32(payload_data + command_position_offset, payload_size - command_position_offset,
                     command_position);
     serialize_int32(payload_data + command_speed_offset, payload_size - command_speed_offset,
                     command_speed);
   }
+
+  // Serialize gripper servo command.
+  uint8_t gripper_command_pos_deg = static_cast<uint8_t>(gripper_position_command_ * RAD_TO_DEG);
+  payload[payload_size - 1] = gripper_command_pos_deg;
 
   // Send command.
   uint32_t msg_id = messenger_.send_request(RequestType::FollowTrajectory, payload_data,

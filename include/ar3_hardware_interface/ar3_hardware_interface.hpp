@@ -187,12 +187,22 @@ public:
   rclcpp::Logger get_logger() const;
 
 protected:
-  std::vector<double> joint_position_command_;
-  std::vector<double> joint_velocity_command_;
-  std::vector<double> joint_position_;
-  std::vector<double> joint_velocity_;
+  struct Joint {
+    std::string name_;
+    bool enabled_ = false;
+    double position_command_ = 0.0;
+    double velocity_command_ = 0.0;
+    double position_state_ = 0.0;
+    double velocity_state_ = 0.0;
+  };
 
-  std::vector<std::string> joint_names_;
+  // State and command interfaces.
+  std::string prefix_;
+  std::vector<Joint> joints_;
+  std::string gripper_name_;
+  bool gripper_enabled_;
+  double gripper_position_command_;
+  double gripper_position_state_;
 
   // Serial port parameters.
   LibSerial::BaudRate baud_rate_;
