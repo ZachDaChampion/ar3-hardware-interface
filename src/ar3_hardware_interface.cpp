@@ -109,10 +109,10 @@ AR3HardwareInterface::on_init(const hardware_interface::HardwareInfo& info)
   joints_.clear();
   joints_.reserve(JOINT_COUNT);
   for (size_t i = 0; i < JOINT_COUNT; ++i) {
-    string name = prefix_ + "joint_" + to_string(i);
+    string name = prefix_ + "_joint_" + to_string(i);
     joints_.emplace_back(Joint{ .name_ = name });
   }
-  gripper_name_ = prefix_ + "gripper_servo";
+  gripper_name_ = prefix_ + "_gripper_servo";
   gripper_enabled_ = false;
   gripper_position_command_ = 0.0;
   gripper_position_state_ = 0.0;
