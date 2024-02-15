@@ -110,7 +110,9 @@ AR3HardwareInterface::on_init(const hardware_interface::HardwareInfo& info)
   joints_.reserve(JOINT_COUNT);
   for (size_t i = 0; i < JOINT_COUNT; ++i) {
     string name = prefix_ + "_joint_" + to_string(i);
-    joints_.emplace_back(Joint{ .name_ = name });
+    Joint j;
+    j.name_ = name;
+    joints_.emplace_back(j);
   }
   gripper_name_ = prefix_ + "_gripper_servo";
   gripper_enabled_ = false;
@@ -149,12 +151,15 @@ AR3HardwareInterface::on_init(const hardware_interface::HardwareInfo& info)
 hardware_interface::CallbackReturn
 AR3HardwareInterface::on_shutdown(const rclcpp_lifecycle::State& previous_state)
 {
+  std::ignore = previous_state;
   return CallbackReturn::SUCCESS;
 }
 
 hardware_interface::CallbackReturn
 AR3HardwareInterface::on_configure(const rclcpp_lifecycle::State& previous_state)
 {
+  std::ignore = previous_state;
+
   // Connect to serial port
   try {
     serial_port_.Open(serial_dev_name_);
@@ -171,6 +176,8 @@ AR3HardwareInterface::on_configure(const rclcpp_lifecycle::State& previous_state
 hardware_interface::CallbackReturn
 AR3HardwareInterface::on_cleanup(const rclcpp_lifecycle::State& previous_state)
 {
+  std::ignore = previous_state;
+
   // Close serial port
   try {
     serial_port_.Close();
@@ -186,13 +193,15 @@ AR3HardwareInterface::on_cleanup(const rclcpp_lifecycle::State& previous_state)
 hardware_interface::CallbackReturn
 AR3HardwareInterface::on_activate(const rclcpp_lifecycle::State& previous_state)
 {
+  std::ignore = previous_state;
+
   static uint8_t fw_version[] = {
     FW_VERSION & 0xFF,
     (FW_VERSION >> 8) & 0xFF,
     (FW_VERSION >> 16) & 0xFF,
     (FW_VERSION >> 24) & 0xFF,
   };
-  static uint8_t all_joints[] = { 0b111111 };
+  // static uint8_t all_joints[] = { 0b111111 };
 
   // Send init command with firmware version.
   try {
@@ -230,6 +239,8 @@ AR3HardwareInterface::on_activate(const rclcpp_lifecycle::State& previous_state)
 hardware_interface::CallbackReturn
 AR3HardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previous_state)
 {
+  std::ignore = previous_state;
+
   // Send reset command.
   try {
     auto logger = get_logger();
@@ -285,6 +296,9 @@ rclcpp::Logger AR3HardwareInterface::get_logger() const
 hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& time,
                                                            const rclcpp::Duration& period)
 {
+  std::ignore = time;
+  std::ignore = period;
+
   // Send request for joint positions.
   auto logger = get_logger();
   auto msg_id = messenger_.send_request(RequestType::GetJoints, nullptr, 0, serial_port_, logger);
@@ -320,7 +334,7 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
   }
 
   // Update joint positions.
-  for (int i = 0; i < JOINT_COUNT; ++i) {
+  for (size_t i = 0; i < JOINT_COUNT; ++i) {
     int32_t angle;
     int32_t speed;
     deserialize_int32(&angle, payload_data + 1 + i * 8);
@@ -339,6 +353,9 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
 hardware_interface::return_type AR3HardwareInterface::write(const rclcpp::Time& time,
                                                             const rclcpp::Duration& period)
 {
+  std::ignore = time;
+  std::ignore = period;
+
   // Create payload buffer.
   uint8_t payload_size =
       JOINT_COUNT * 8 + 1;  // Each joint has 8 bytes of data, plus 1 byte for gripper servo.
