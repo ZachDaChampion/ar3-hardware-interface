@@ -114,7 +114,7 @@ AR3HardwareInterface::on_init(const hardware_interface::HardwareInfo& info)
     j.name_ = name;
     joints_.emplace_back(j);
   }
-  gripper_name_ = prefix_ + "_gripper_servo";
+  gripper_name_ = prefix_ + "_gripper";
   gripper_enabled_ = false;
   gripper_position_command_ = 0.0;
   gripper_position_state_ = 0.0;
