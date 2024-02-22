@@ -260,6 +260,7 @@ AR3HardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previous_stat
 
 vector<hardware_interface::StateInterface> AR3HardwareInterface::export_state_interfaces()
 {
+  RCLCPP_DEBUG(get_logger(), "Exporting joint state interfaces");
   vector<hardware_interface::StateInterface> state_interfaces;
   for (auto& joint : joints_) {
     if (joint.enabled_) {
@@ -268,6 +269,7 @@ vector<hardware_interface::StateInterface> AR3HardwareInterface::export_state_in
     }
   }
   if (gripper_enabled_) {
+    RCLCPP_DEBUG(get_logger(), "Exporting gripper state interfaces");
     state_interfaces.emplace_back(gripper_name_, "position", &gripper_position_state_);
   }
   return state_interfaces;
@@ -276,6 +278,7 @@ vector<hardware_interface::StateInterface> AR3HardwareInterface::export_state_in
 vector<hardware_interface::CommandInterface> AR3HardwareInterface::export_command_interfaces()
 {
   vector<hardware_interface::CommandInterface> command_interfaces;
+  RCLCPP_DEBUG(get_logger(), "Exporting joint command interfaces");
   for (auto& joint : joints_) {
     if (joint.enabled_) {
       command_interfaces.emplace_back(joint.name_, "position", &joint.position_command_);
@@ -283,6 +286,7 @@ vector<hardware_interface::CommandInterface> AR3HardwareInterface::export_comman
     }
   }
   if (gripper_enabled_) {
+    RCLCPP_DEBUG(get_logger(), "Exporting gripper command interfaces");
     command_interfaces.emplace_back(gripper_name_, "position", &gripper_position_command_);
   }
   return command_interfaces;
@@ -301,17 +305,21 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
 
   // Send request for joint positions.
   auto logger = get_logger();
+  RCLCPP_DEBUG(logger, "Requesting joint positions");
   auto msg_id = messenger_.send_request(RequestType::GetJoints, nullptr, 0, serial_port_, logger);
 
   // Wait for valid response.
   unique_ptr<Response> response;
+  RCLCPP_DEBUG(logger, "Waiting for joint positions response");
   while (true) {
     response = messenger_.wait_for_response(msg_id, serial_port_, logger);
+    RCLCPP_DEBUG(logger, "Received a response of type: %d", static_cast<uint8_t>(response->type));
     if (response->type == Response::Type::Joints) break;
 
     RCLCPP_WARN(logger, "Received unexpected response type: %d",
                 static_cast<uint8_t>(response->type));
   }
+  RCLCPP_DEBUG(logger, "Received valid joint positions response");
 
   // Make sure there is a payload and it is the correct size.
   if (!(response->data)) {
@@ -334,6 +342,7 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
   }
 
   // Update joint positions.
+  RCLCPP_DEBUG(logger, "Updating joint position states");
   for (size_t i = 0; i < JOINT_COUNT; ++i) {
     int32_t angle;
     int32_t speed;
@@ -344,6 +353,7 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
   }
 
   // Update gripper servo position.
+  RCLCPP_DEBUG(logger, "Updating gripper position state");
   uint8_t gripper_pos_deg = payload_data[expected_size - 1];
   gripper_position_state_ = static_cast<double>(gripper_pos_deg) * DEG_TO_RAD;
 
@@ -365,6 +375,7 @@ hardware_interface::return_type AR3HardwareInterface::write(const rclcpp::Time& 
   auto logger = get_logger();
 
   // Serialize joint commands.
+  RCLCPP_DEBUG(logger, "Serializing joint commands");
   for (size_t i = 0; i < JOINT_COUNT; ++i) {
     // Convert to units expected by the robot.
     int32_t command_position = static_cast<int32_t>(joints_[i].position_command_ * ANGLE_TO_COBOT);
@@ -380,13 +391,17 @@ hardware_interface::return_type AR3HardwareInterface::write(const rclcpp::Time& 
   }
 
   // Serialize gripper servo command.
+  RCLCPP_DEBUG(logger, "Serializing gripper command");
   uint8_t gripper_command_pos_deg = static_cast<uint8_t>(gripper_position_command_ * RAD_TO_DEG);
   payload[payload_size - 1] = gripper_command_pos_deg;
 
   // Send command.
+  RCLCPP_DEBUG(logger, "Sending joint commands");
   uint32_t msg_id = messenger_.send_request(RequestType::FollowTrajectory, payload_data,
                                             payload_size, serial_port_, logger);
+  RCLCPP_DEBUG(logger, "Waiting for joint commands ack");
   messenger_.wait_for_ack(msg_id, serial_port_, logger);
+  RCLCPP_DEBUG(logger, "Received joint commands ack");
 
   return hardware_interface::return_type::OK;
 }
