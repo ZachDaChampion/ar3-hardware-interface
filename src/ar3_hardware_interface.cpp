@@ -201,7 +201,7 @@ AR3HardwareInterface::on_activate(const rclcpp_lifecycle::State& previous_state)
     (FW_VERSION >> 16) & 0xFF,
     (FW_VERSION >> 24) & 0xFF,
   };
-  // static uint8_t all_joints[] = { 0b111111 };
+  static uint8_t all_joints[] = { 0b111111 };
 
   // Send init command with firmware version.
   try {
@@ -301,11 +301,13 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
 
   // Send request for joint positions.
   auto logger = get_logger();
+    RCLCPP_INFO(logger, "Read");
   auto msg_id = messenger_.send_request(RequestType::GetJoints, nullptr, 0, serial_port_, logger);
 
   // Wait for valid response.
   unique_ptr<Response> response;
   while (true) {
+    RCLCPP_INFO(logger, "Waiting for response");
     response = messenger_.wait_for_response(msg_id, serial_port_, logger);
     if (response->type == Response::Type::Joints) break;
 
@@ -314,6 +316,7 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
   }
 
   // Make sure there is a payload and it is the correct size.
+    RCLCPP_INFO(logger, "Response received");
   if (!(response->data)) {
     RCLCPP_ERROR(logger, "Received joints response with no payload");
     return hardware_interface::return_type::ERROR;
