@@ -118,6 +118,7 @@ AR3HardwareInterface::on_init(const hardware_interface::HardwareInfo& info)
   gripper_enabled_ = false;
   gripper_position_command_ = 0.0;
   gripper_position_state_ = 0.0;
+  gripper_velocity_state_ = 0.0;
 
   // Enable all joints that match the hardware info
   for (auto& info_joint : info_.joints) {
@@ -195,35 +196,20 @@ AR3HardwareInterface::on_activate(const rclcpp_lifecycle::State& previous_state)
 {
   std::ignore = previous_state;
 
-  static uint8_t fw_version[] = {
+  static const uint8_t fw_version[] = {
     FW_VERSION & 0xFF,
     (FW_VERSION >> 8) & 0xFF,
     (FW_VERSION >> 16) & 0xFF,
     (FW_VERSION >> 24) & 0xFF,
   };
-  static uint8_t all_joints[] = { 0b111111 };
 
   // Send init command with firmware version.
   try {
     auto logger = get_logger();
-    uint32_t msg_id = messenger_.send_request(RequestType::Init, fw_version, sizeof(fw_version),
-                                              serial_port_, logger);
+    const uint32_t msg_id = messenger_.send_request(RequestType::Init, fw_version,
+                                                    sizeof(fw_version), serial_port_, logger);
     messenger_.wait_for_ack(msg_id, serial_port_, logger);
     RCLCPP_INFO(logger, "COBOT initialized");
-
-    // // Calibrate the robot.
-    // msg_id = messenger_.send_request(RequestType::Calibrate, all_joints, sizeof(all_joints),
-    //                                  serial_port_, logger);
-    // messenger_.wait_for_ack(msg_id, serial_port_, logger);
-    // messenger_.wait_for_done(msg_id, serial_port_, logger);
-    // RCLCPP_INFO(logger, "COBOT calibrated");
-
-    // // Home the robot.
-    // msg_id = messenger_.send_request(RequestType::GoHome, all_joints, sizeof(all_joints),
-    //                                  serial_port_, logger);
-    // messenger_.wait_for_ack(msg_id, serial_port_, logger);
-    // messenger_.wait_for_done(msg_id, serial_port_, logger);
-    // RCLCPP_INFO(logger, "COBOT homed");
 
   } catch (const exception& e) {
     RCLCPP_ERROR(get_logger(), "Failed to activate robot: %s", e.what());
@@ -271,6 +257,7 @@ vector<hardware_interface::StateInterface> AR3HardwareInterface::export_state_in
   if (gripper_enabled_) {
     RCLCPP_INFO(get_logger(), "Exporting gripper state interfaces");
     state_interfaces.emplace_back(gripper_name_, "position", &gripper_position_state_);
+    state_interfaces.emplace_back(gripper_name_, "velocity", &gripper_velocity_state_);
   }
   return state_interfaces;
 }
@@ -301,11 +288,11 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
                                                            const rclcpp::Duration& period)
 {
   std::ignore = time;
-  std::ignore = period;
 
   // Send request for joint positions.
   auto logger = get_logger();
-  auto msg_id = messenger_.send_request(RequestType::GetJoints, nullptr, 0, serial_port_, logger);
+  const auto msg_id =
+      messenger_.send_request(RequestType::GetJoints, nullptr, 0, serial_port_, logger);
 
   // Wait for valid response.
   unique_ptr<Response> response;
@@ -347,9 +334,13 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
     joints_[i].velocity_state_ = static_cast<double>(speed) * ANGLE_FROM_COBOT;
   }
 
-  // Update gripper servo position.
-  uint8_t gripper_pos_deg = payload_data[expected_size - 1];
-  gripper_position_state_ = static_cast<double>(gripper_pos_deg) * DEG_TO_RAD;
+  // Update gripper servo position. We calculate velocity based on the delta since the last call to
+  // `read()`. We don't care about precise numbers since all gripper measurements are guesses
+  // anyway.
+  const uint8_t gripper_pos_deg = payload_data[expected_size - 1];
+  const double gripper_pos_rad = static_cast<double>(gripper_pos_deg) * DEG_TO_RAD;
+  gripper_velocity_state_ = (gripper_pos_rad - gripper_position_state_) / period.seconds();
+  gripper_position_state_ = gripper_pos_rad;
 
   return hardware_interface::return_type::OK;
 }

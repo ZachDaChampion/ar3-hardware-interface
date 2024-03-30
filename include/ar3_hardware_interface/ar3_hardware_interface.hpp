@@ -203,6 +203,7 @@ protected:
   bool gripper_enabled_;
   double gripper_position_command_;
   double gripper_position_state_;
+  double gripper_velocity_state_;
 
   // Serial port parameters.
   LibSerial::BaudRate baud_rate_;
