@@ -13,7 +13,7 @@
 #include "ar3_hardware_interface/checksum.hpp"
 #include "ar3_hardware_interface/serialize.h"
 
-static constexpr uint32_t FW_VERSION = 6;
+static constexpr uint32_t FW_VERSION = 7;
 
 static constexpr size_t JOINT_COUNT = 6;
 static constexpr double DEG_TO_RAD = M_PI / 180.0;
@@ -116,8 +116,8 @@ AR3HardwareInterface::on_init(const hardware_interface::HardwareInfo& info)
   }
   gripper_name_ = prefix_ + "_gripper";
   gripper_enabled_ = false;
-  gripper_position_command_ = 0.0;
-  gripper_position_state_ = 0.0;
+  gripper_position_command_ = 30.0 * DEG_TO_RAD;
+  gripper_position_state_ = 30.0 * DEG_TO_RAD;
   gripper_velocity_state_ = 0.0;
 
   // Enable all joints that match the hardware info
