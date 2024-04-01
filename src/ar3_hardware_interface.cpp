@@ -116,8 +116,8 @@ AR3HardwareInterface::on_init(const hardware_interface::HardwareInfo& info)
   }
   gripper_name_ = prefix_ + "_gripper";
   gripper_enabled_ = false;
-  gripper_position_command_ = 30.0 * DEG_TO_RAD;
-  gripper_position_state_ = 30.0 * DEG_TO_RAD;
+  gripper_position_command_ = 100.0 * DEG_TO_RAD;
+  gripper_position_state_ = 100.0 * DEG_TO_RAD;
   gripper_velocity_state_ = 0.0;
 
   // Enable all joints that match the hardware info
