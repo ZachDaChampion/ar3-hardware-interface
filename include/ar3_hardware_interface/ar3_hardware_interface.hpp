@@ -191,9 +191,12 @@ protected:
     std::string name_;
     bool enabled_ = false;
     double position_command_ = 0.0;
+    double position_bias_command_ = 0.0;
     double velocity_command_ = 0.0;
     double position_state_ = 0.0;
     double velocity_state_ = 0.0;
+    double position_state_raw_ = 0.0;
+    double position_bias_ = 0.0;
   };
 
   // State and command interfaces.

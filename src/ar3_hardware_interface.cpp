@@ -251,6 +251,7 @@ vector<hardware_interface::StateInterface> AR3HardwareInterface::export_state_in
   for (auto& joint : joints_) {
     if (joint.enabled_) {
       state_interfaces.emplace_back(joint.name_, "position", &joint.position_state_);
+      state_interfaces.emplace_back(joint.name_, "position_raw", &joint.position_state_raw_);
       state_interfaces.emplace_back(joint.name_, "velocity", &joint.velocity_state_);
     }
   }
@@ -269,6 +270,7 @@ vector<hardware_interface::CommandInterface> AR3HardwareInterface::export_comman
   for (auto& joint : joints_) {
     if (joint.enabled_) {
       command_interfaces.emplace_back(joint.name_, "position", &joint.position_command_);
+      command_interfaces.emplace_back(joint.name_, "position_bias", &joint.position_bias_command_);
       command_interfaces.emplace_back(joint.name_, "velocity", &joint.velocity_command_);
     }
   }
@@ -330,7 +332,8 @@ hardware_interface::return_type AR3HardwareInterface::read(const rclcpp::Time& t
     int32_t speed;
     deserialize_int32(&angle, payload_data + 1 + i * 8);
     deserialize_int32(&speed, payload_data + 5 + i * 8);
-    joints_[i].position_state_ = static_cast<double>(angle) * ANGLE_FROM_COBOT;
+    joints_[i].position_state_raw_ = static_cast<double>(angle) * ANGLE_FROM_COBOT;
+    joints_[i].position_state_ = joints_[i].position_state_raw_ + joints_[i].position_bias_command_;
     joints_[i].velocity_state_ = static_cast<double>(speed) * ANGLE_FROM_COBOT;
   }
 
