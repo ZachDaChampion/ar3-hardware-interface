@@ -365,7 +365,8 @@ hardware_interface::return_type AR3HardwareInterface::write(const rclcpp::Time& 
   // Serialize joint commands.
   for (size_t i = 0; i < JOINT_COUNT; ++i) {
     // Convert to units expected by the robot.
-    int32_t command_position = static_cast<int32_t>(joints_[i].position_command_ * ANGLE_TO_COBOT);
+    int32_t command_position = static_cast<int32_t>(
+        (joints_[i].position_command_ - joints_[i].position_bias_) * ANGLE_TO_COBOT);
     int32_t command_speed = static_cast<int32_t>(joints_[i].velocity_command_ * ANGLE_TO_COBOT);
 
     // Serialize joint command.
