@@ -13,7 +13,7 @@
 #include "ar3_hardware_interface/checksum.hpp"
 #include "ar3_hardware_interface/serialize.h"
 
-static constexpr uint32_t FW_VERSION = 7;
+static constexpr uint32_t FW_VERSION = 8;
 
 static constexpr size_t JOINT_COUNT = 6;
 static constexpr double DEG_TO_RAD = M_PI / 180.0;
