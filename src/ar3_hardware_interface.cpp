@@ -13,7 +13,7 @@
 #include "ar3_hardware_interface/checksum.hpp"
 #include "ar3_hardware_interface/serialize.h"
 
-static constexpr uint32_t FW_VERSION = 8;
+static constexpr uint32_t FW_VERSION = 7;
 
 static constexpr size_t JOINT_COUNT = 6;
 static constexpr double DEG_TO_RAD = M_PI / 180.0;
@@ -166,7 +166,8 @@ AR3HardwareInterface::on_configure(const rclcpp_lifecycle::State& previous_state
     serial_port_.Open(serial_dev_name_);
     serial_port_.SetBaudRate(baud_rate_);
   } catch (const exception& e) {
-    RCLCPP_ERROR(get_logger(), "Failed to open serial port: %s", e.what());
+    RCLCPP_ERROR(get_logger(), "Failed to open serial port %s: %s", serial_dev_name_.c_str(),
+                 e.what());
     return CallbackReturn::ERROR;
   }
   RCLCPP_INFO(get_logger(), "Opened serial port");
